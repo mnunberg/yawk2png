@@ -1,15 +1,26 @@
 #include "webkitrenderer.h"
 #include <QWebFrame>
 #include <QtWebKit>
-#include <QWebPage>
 #include <QList>
+#include <QSslConfiguration>
+#include <QSslSocket>
+#include <QPainter>
 #include <iostream>
+#include "configurablepage.h"
+#include "twutil.h"
 
-WebkitRenderer::WebkitRenderer(QNetworkRequest req): QObject()
+WebkitRenderer::WebkitRenderer(QNetworkRequest req, QNetworkAccessManager *qnam): QObject()
 {
 	currentUrl = req.url();
+
 	this->req = req;
-	qDebug("current URL is %s", qPrintable(currentUrl.toString()));
+	this->qnam = qnam;
+	if(!req.rawHeader("User-Agent").isNull()) {
+		page.uaString = QString(req.rawHeader("User-Agent"));
+	}
+	page.setNetworkAccessManager(qnam);
+
+	twlog_debug("current URL is %s", qPrintable(currentUrl.toString()));
 
 	connect((&page)->networkAccessManager(), SIGNAL(finished(QNetworkReply*)),
 			SLOT(qnamFinished(QNetworkReply*)));
@@ -24,8 +35,8 @@ WebkitRenderer::WebkitRenderer(QNetworkRequest req): QObject()
 
 void WebkitRenderer::load()
 {
+	/*maybe we can put more here?*/
 	page.mainFrame()->load(req);
-	qDebug("URL is still %s", qPrintable(req.url().toString()));
 	/*Load the request, and connect the handler...*/
 }
 
@@ -41,7 +52,8 @@ void WebkitRenderer::render()
 	p.setRenderHint(QPainter::SmoothPixmapTransform, true);
 
 	page.setViewportSize(page.mainFrame()->contentsSize());
-	page.mainFrame()->render(&p, QWebFrame::ContentsLayer);
+//	page.mainFrame()->render(&p, QWebFrame::ContentsLayer);
+	page.mainFrame()->render(&p);
 }
 
 void WebkitRenderer::loadFinished(bool status)
@@ -68,7 +80,7 @@ void WebkitRenderer::loadFinished(bool status)
 
 void WebkitRenderer::loadProgress(int progress)
 {
-	std::cerr << ".";
+	std::cerr << progress << "%\r";
 }
 
 void WebkitRenderer::qnamFinished(QNetworkReply *reply)

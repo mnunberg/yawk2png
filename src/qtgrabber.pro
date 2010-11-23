@@ -5,11 +5,12 @@ QT += webkit \
     network
 TARGET = qtgrabber
 TEMPLATE = app
-CONFIG += qt \
-    thread \
-    release \
-    staticlib \
-    static
 SOURCES += main.cpp \
-    webkitrenderer.cpp
-HEADERS += webkitrenderer.h
+    webkitrenderer.cpp \
+    configurablepage.cpp \
+    twutil.cpp
+HEADERS += webkitrenderer.h \
+    configurablepage.h \
+    twutil.h
+QMAKE_CXXFLAGS += -g \
+    -D_GNU_SOURCE

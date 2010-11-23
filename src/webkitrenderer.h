@@ -2,9 +2,10 @@
 #define WEBKITRENDERER_H
 
 #include <QObject>
-#include <QWebPage>
 #include <QImage>
 #include <QNetworkRequest>
+#include <QNetworkAccessManager>
+#include "configurablepage.h"
 
 struct http_errinfo {
 	QString url;
@@ -15,11 +16,12 @@ class WebkitRenderer : public QObject
 {
 	Q_OBJECT;
 public:
-	WebkitRenderer(QNetworkRequest);
+	WebkitRenderer(QNetworkRequest, QNetworkAccessManager*);
 	QUrl currentUrl; /*URL that we may have been redirected to*/
 	QImage image;
-	QWebPage page;
+	ConfigurablePage page;
 	QNetworkRequest req;
+	QNetworkAccessManager *qnam;
 	void load();
 	void render();
 	enum fetchResult {
