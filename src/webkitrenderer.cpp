@@ -88,6 +88,11 @@ void WebkitRenderer::qnamFinished(QNetworkReply *reply)
 	/*This tries to detect some errors with a bit of brains. We keep track of
 	  what our 'real' URL is, by changing our currentUrl to whatever we are
 	  redirected to*/
+	if(reply->error()) {
+		twlog_crit("error for %s: %s",
+				   qPrintable(reply->url().toString()),
+				   qPrintable(reply->errorString()));
+	}
 	if(reply->url().toEncoded(QUrl::StripTrailingSlash) !=
 	   currentUrl.toEncoded(QUrl::StripTrailingSlash)) {
 //		qDebug("Not operating on URL %s (our URL is %s)",
@@ -95,7 +100,6 @@ void WebkitRenderer::qnamFinished(QNetworkReply *reply)
 //			   qPrintable(currentUrl.toString()));
 		return;
 	}
-
 	int statuscode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
 	if(statuscode >= 400 && statuscode < 600) {
 		qDebug("%d for %s", statuscode, qPrintable(reply->url().toString()));

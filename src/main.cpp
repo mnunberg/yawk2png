@@ -43,6 +43,7 @@ public:
 	/*value fields*/
 	char * outfile;
 	QString url;
+	bool use_proxy;
 	QString proxy_host;
 	quint16 proxy_port;
 	bool stdin_header;
@@ -67,11 +68,14 @@ public:
 		QRegExp regex("^https?://([^:]+):(\\d+)$");
 		if((regex.indexIn(text) == -1) ||
 		   /*not needed, because the first will always fail*/
-		   (regex.captureCount() != 2))
+		   (regex.captureCount() != 2)) {
+			twlog_warn("Problem parsing proxy!");
 			return 0;
+			}
 		/*Capture objects generally have the entire match as their first element*/
 		proxy_host = regex.capturedTexts()[1];
 		proxy_port = regex.capturedTexts()[2].toInt();
+		twlog_warn("%s:%d", qPrintable(proxy_host), proxy_port);
 		/*finally, succeed*/
 		return 1;
 	}
@@ -111,6 +115,7 @@ public:
 			}
 			case 'P': {
 				/*Proxy*/
+				use_proxy = true;
 				bool success = false;
 				do {
 					/*funky control structure so we can break without breaking, yo dawg*/
@@ -148,9 +153,10 @@ private:
 		int success = 1;
 		/*some postprocessing here. This configures our options a bit more,
 		  using information acquired from all arguments*/
-		if ((!url.isNull()) && url.startsWith("https")) {
+		if (url.size() && url.startsWith("https") && use_proxy) {
 			if(getenv("https_proxy")) {
 				QString s(getenv("https_proxy"));
+				twlog_warn(qPrintable(s));
 				if(!set_proxy(s))
 					success = 0;
 			}

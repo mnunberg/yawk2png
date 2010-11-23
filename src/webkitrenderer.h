@@ -19,7 +19,7 @@ public:
 	WebkitRenderer(QNetworkRequest, QNetworkAccessManager*);
 	QUrl currentUrl; /*URL that we may have been redirected to*/
 	QImage image;
-	ConfigurablePage page;
+	ConfigurablePage page; /*Needed to subclass QWebPage to getcustomizable user agent*/
 	QNetworkRequest req;
 	QNetworkAccessManager *qnam;
 	void load();
