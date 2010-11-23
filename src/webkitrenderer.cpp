@@ -8,11 +8,9 @@
 #include <iostream>
 #include "configurablepage.h"
 #include "twutil.h"
-
 WebkitRenderer::WebkitRenderer(QNetworkRequest req, QNetworkAccessManager *qnam): QObject()
 {
 	currentUrl = req.url();
-
 	this->req = req;
 	this->qnam = qnam;
 	if(!req.rawHeader("User-Agent").isNull()) {

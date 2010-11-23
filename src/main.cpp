@@ -7,6 +7,7 @@
 #include <QRegExp>
 
 #include "webkitrenderer.h"
+#include "customnam.h"
 #include "twutil.h"
 
 #include <getopt.h>
@@ -14,13 +15,25 @@
 #include <stdlib.h>
 #include <iostream>
 
+#define VERSION_STRING "11-23-2010.1-STABLE"
+
 const char USAGE_STRING[] =
-			"-o --outfile FILE\n"
-			"-u --url URL\n"
-			"-P --proxy[=http[s]://PROXY:PORT] (note the '=')\n"
-			"-R --referrer REFERRER\n"
-			"-H --with-header HEADER_FIELD:HEADER_VALUE\n"
-			"-S --stdin-header indicate header is being piped to stdin\n";
+		"qtgrabber v" VERSION_STRING "\n"
+		"SYNOPSIS:\n"
+		"qtgrabber is a webpage capturing utility that is somewhat tolerant of errors\n"
+		"and is able to provide notification about them. It supports piping a complete\n"
+		"HTTP header on stdin, or specifying individual header values using the -H option\n"
+		"\n"
+		"\n"
+		"USAGE:\n"
+		"NOTE: because getopt(3) sucks balls, you will need to put optional\n"
+		"arguments in the form of -Aarg or --argument=arg. Spaces will break things\n"
+		"\t-o --outfile FILE\n"
+		"\t-u --url URL\n"
+		"\t-P --proxy[=http[s]://PROXY:PORT] (note the '=')\n"
+		"\t-H --with-header HEADER_FIELD:HEADER_VALUE\n"
+		"\t-S --stdin-header indicate header is being piped to stdin\n"
+		"\t-V --version print version string\n";
 
 const struct option _longopts[] = {
 	{"outfile",			required_argument,	NULL, 'o'},
@@ -29,10 +42,11 @@ const struct option _longopts[] = {
 	{"proxy",			optional_argument,	NULL, 'P'},
 	{"with-header",		required_argument,	NULL, 'H'},
 	{"stdin-header",	no_argument,		NULL, 'S'},
+	{"version",			no_argument,		NULL, 'V'},
 	{"help",			no_argument,		NULL, 'h'},
 	{NULL, 0, NULL, NULL}
 };
-const char *optstring = "o:u:d::P::H:Sh?";
+const char *optstring = "o:u:d::P::H:ShV?";
 
 
 class CLIOpts {
@@ -91,6 +105,10 @@ public:
 			case 'H':
 				if(header_append(QString(optarg)))
 					break;
+				else {
+					twlog_crit("Couldn't parse header '%s'", optarg);
+					return 0;
+				}
 			case 'S': {
 				QTextStream stream(stdin);
 				QString line;
@@ -110,8 +128,10 @@ public:
 				}
 				if(success)
 					break;
-				else
-					qCritical("Bad header on input!");
+				else {
+					twlog_crit("Bad header on input!");
+						return 0;
+				}
 			}
 			case 'P': {
 				/*Proxy*/
@@ -127,7 +147,7 @@ public:
 					} else if (getenv("https_proxy")) {
 						s = QString(getenv("https_proxy"));
 					} else {
-						qCritical("No proxy specified and nothing found in environment");
+						twlog_crit("No proxy specified and nothing found in environment");
 						break;
 					}
 					if (set_proxy(s)) {
@@ -138,6 +158,9 @@ public:
 					break;
 				} /*fall through otherwise*/
 			}
+			case 'V':
+				std::cerr << VERSION_STRING << "\n";
+				exit(1);
 			case 'h':
 			case '?':
 			default:
@@ -172,21 +195,19 @@ static CLIOpts cliopts;
 static WebkitRenderer *gen_renderer() {
 	/*generates a WebkitRenderer object based on the command line options..*/
 	QNetworkRequest req;
-	QNetworkAccessManager *qnam = new QNetworkAccessManager();
+	CustomNAM *qnam = new CustomNAM();
 	if(!cliopts.url.isNull())
 		req.setUrl(QUrl(cliopts.url));
 	if(!cliopts.proxy_host.isNull()) {
 		QNetworkProxy proxy(QNetworkProxy::HttpProxy, cliopts.proxy_host, cliopts.proxy_port);
-		qDebug("%s: PROXY: %s:%d", __PRETTY_FUNCTION__,
-			   qPrintable(cliopts.proxy_host), cliopts.proxy_port);
+		twlog_debug("PROXY: %s:%d", qPrintable(cliopts.proxy_host), cliopts.proxy_port);
 		qnam->setProxy(proxy);
 	}
 	/*Header overrides*/
 	QHashIterator<QString,QString> i(*(cliopts.headers));
 	while(i.hasNext()) {
 		i.next();
-		qDebug("%s: %s: %s",  __PRETTY_FUNCTION__,
-			   qPrintable(i.key()), qPrintable(i.value()));
+		twlog_debug("%s: %s", qPrintable(i.key()), qPrintable(i.value()));
 		req.setRawHeader(i.key().toLocal8Bit(), i.value().toLocal8Bit());
 	}
 	WebkitRenderer *r = new WebkitRenderer(req, qnam);
@@ -201,26 +222,25 @@ public:
 	_SaveImage() : QObject() {}
 public slots:
 	void save_image() {
-		qDebug("Hello!");
 		/*Signal Handler*/
 		WebkitRenderer *r = qobject_cast<WebkitRenderer*>(QObject::sender());
 		if(!r) {
-			qCritical("Couldn't get WebkitRenderer object");
+			twlog_crit("Couldn't get WebkitRenderer object");
 			exit(1);
 		}
 		if(!r->image.isNull()) {
 			if(!r->image.save(&outfile, "png")) {
-				qCritical("Problem saving %s: %s",
+				twlog_crit("Problem saving %s: %s",
 						  qPrintable(outfile.fileName()),
 						  qPrintable(outfile.errorString()));
 				exit(1);
 			}
 		} else {
-			qCritical("PageLoadError!");
+			twlog_crit("PageLoadError!");
 			QApplication::exit(1);
 		}
 		if(r->resultCode != WebkitRenderer::OK) {
-			qWarning("Got image, but result code was %d",
+			twlog_warn("Got image, but result code was %d",
 					 r->resultCode);
 			exit(1);
 		}
@@ -249,12 +269,13 @@ static void debuglogger(QtMsgType type, const char *msg)
 int main(int argc, char **argv)
 {
 	qInstallMsgHandler(debuglogger);
-	QApplication a(argc, argv);
 	if((!cliopts.parse_options(argc, argv)) ||
 	   !(cliopts.url.size() && cliopts.outfile)) {
 		std::cerr << USAGE_STRING;
 		exit(1);
 	}
+	QApplication a(argc, argv);
+
 	if (strcmp(cliopts.outfile, "-") == 0) {
 		outfile.open(1, QIODevice::WriteOnly);
 		qDebug("using stdout");

@@ -8,9 +8,11 @@ TEMPLATE = app
 SOURCES += main.cpp \
     webkitrenderer.cpp \
     configurablepage.cpp \
-    twutil.cpp
+    twutil.cpp \
+    customnam.cpp
 HEADERS += webkitrenderer.h \
     configurablepage.h \
-    twutil.h
+    twutil.h \
+    customnam.h
 QMAKE_CXXFLAGS += -g \
     -D_GNU_SOURCE
