@@ -2,10 +2,10 @@
 #define TWUTIL_H
 
 #include <QObject>
-
+#include <QFileInfo>
 #define fn_log(level, fmt, ...) \
 	q ## level (qPrintable( \
-							QString().sprintf("%s:%d(%s): ", __FILE__, __LINE__, __func__) + \
+							QString().sprintf("%s:%d(%s): ", qPrintable(QFileInfo(__FILE__).baseName()), __LINE__, __func__) + \
 					   QString().sprintf(fmt, ## __VA_ARGS__)))
 
 #define twlog_debug(fmt, ...) fn_log(Debug, fmt, ## __VA_ARGS__)
