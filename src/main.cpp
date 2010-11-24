@@ -46,7 +46,7 @@ const struct option _longopts[] = {
 	{"proxy",			optional_argument,	NULL, 'P'},
 	{"with-header",		required_argument,	NULL, 'H'},
 	{"stdin-header",	no_argument,		NULL, 'S'},
-	{"per-connection-timeout", no_argument, NULL, 'T'},
+	{"per-connection-timeout", required_argument, NULL, 'T'},
 	{"version",			no_argument,		NULL, 'V'},
 	{"help",			no_argument,		NULL, 'h'},
 	{NULL, 0, NULL, NULL}
@@ -165,6 +165,7 @@ public:
 				} /*fall through otherwise*/
 			}
 			case 'T':
+				twlog_crit("hi");
 				connection_timeout = atoi(optarg);
 				if(!connection_timeout) {
 					twlog_crit("Bad timeout value!");
