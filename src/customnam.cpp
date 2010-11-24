@@ -13,14 +13,16 @@ CustomNAM::CustomNAM(QObject *parent) :
 QNetworkReply *CustomNAM::createRequest(
 		Operation op, const QNetworkRequest &request, QIODevice *outgoingData)
 {
-//	twlog_warn("Hello!");
-//	QList<QByteArray>::iterator i;
-//	QList<QByteArray> headerlist = request.rawHeaderList();
-//	for(i=headerlist.begin(); i != headerlist.end(); ++i) {
-////		std::cerr << ".";
-//		qDebug("%s: %s", (*i).constData(), request.rawHeader(*i).constData());
-//	}
-	QNetworkReply *ret = QNetworkAccessManager::createRequest(op, request, outgoingData);
+	/*We need to create a new request since the one we were passed is marked as const*/
+	QNetworkRequest newreq(request);
+	QHashIterator<QString,QString> i(*(headers));
+	while(i.hasNext()) {
+		i.next();
+		twlog_debug("%s: %s", qPrintable(i.key()), qPrintable(i.value()));
+		newreq.setRawHeader(i.key().toLocal8Bit(), i.value().toLocal8Bit());
+	}
+
+	QNetworkReply *ret = QNetworkAccessManager::createRequest(op, newreq, outgoingData);
 	if(connTimeout) {
 		new QNRWrapper(ret, connTimeout);
 	}

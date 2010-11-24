@@ -211,19 +211,15 @@ static WebkitRenderer *gen_renderer() {
 	QNetworkRequest req;
 	CustomNAM *qnam = new CustomNAM();
 	qnam->connTimeout = cliopts.connection_timeout;
+
+	/*make each request have these headers*/
+	qnam->headers = cliopts.headers;
 	if(!cliopts.url.isNull())
 		req.setUrl(QUrl(cliopts.url));
 	if(!cliopts.proxy_host.isNull()) {
 		QNetworkProxy proxy(QNetworkProxy::HttpProxy, cliopts.proxy_host, cliopts.proxy_port);
 		twlog_debug("PROXY: %s:%d", qPrintable(cliopts.proxy_host), cliopts.proxy_port);
 		qnam->setProxy(proxy);
-	}
-	/*Header overrides*/
-	QHashIterator<QString,QString> i(*(cliopts.headers));
-	while(i.hasNext()) {
-		i.next();
-		twlog_debug("%s: %s", qPrintable(i.key()), qPrintable(i.value()));
-		req.setRawHeader(i.key().toLocal8Bit(), i.value().toLocal8Bit());
 	}
 	WebkitRenderer *r = new WebkitRenderer(req, qnam);
 	return r;
