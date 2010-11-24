@@ -15,25 +15,29 @@
 #include <stdlib.h>
 #include <iostream>
 
-#define VERSION_STRING "11-23-2010.1-STABLE"
+#define VERSION_STRING "11-23-2010.2-CURRENT"
 
 const char USAGE_STRING[] =
 		"qtgrabber v" VERSION_STRING "\n"
 		"SYNOPSIS:\n"
-		"qtgrabber is a webpage capturing utility that is somewhat tolerant of errors\n"
-		"and is able to provide notification about them. It supports piping a complete\n"
-		"HTTP header on stdin, or specifying individual header values using the -H option\n"
-		"\n"
+			"\tqtgrabber is a webpage capturing utility that is somewhat tolerant\n"
+			"\tof errors and is able to provide notification about them. It supports \n"
+			"\tpiping a complete HTTP header on stdin, or specifying individual \n"
+			"\theader values using the -H option\n"
 		"\n"
 		"USAGE:\n"
 		"NOTE: because getopt(3) sucks balls, you will need to put optional\n"
 		"arguments in the form of -Aarg or --argument=arg. Spaces will break things\n"
-		"\t-o --outfile FILE\n"
-		"\t-u --url URL\n"
-		"\t-P --proxy[=http[s]://PROXY:PORT] (note the '=')\n"
-		"\t-H --with-header HEADER_FIELD:HEADER_VALUE\n"
-		"\t-S --stdin-header indicate header is being piped to stdin\n"
-		"\t-V --version print version string\n";
+			"\t-o --outfile FILE\n"
+			"\t-u --url URL\n"
+			"\t-P --proxy[=http[s]://PROXY:PORT] (note the '=')\n"
+			"\t-H --with-header HEADER_FIELD:HEADER_VALUE\n"
+			"\t-S --stdin-header indicate header is being piped to stdin\n"
+			"\t-T --per-connection-timeout=MSECS how much time to give each \n"
+				"\t\trequest (in msecs) before it is aborted. note, this is\n"
+				"\t\tnot the amount of time to get the page, this is just a \n"
+				"\t\ttolerance level for each asset\n"
+			"\t-V --version print version string\n";
 
 const struct option _longopts[] = {
 	{"outfile",			required_argument,	NULL, 'o'},
@@ -42,11 +46,12 @@ const struct option _longopts[] = {
 	{"proxy",			optional_argument,	NULL, 'P'},
 	{"with-header",		required_argument,	NULL, 'H'},
 	{"stdin-header",	no_argument,		NULL, 'S'},
+	{"per-connection-timeout", no_argument, NULL, 'T'},
 	{"version",			no_argument,		NULL, 'V'},
 	{"help",			no_argument,		NULL, 'h'},
 	{NULL, 0, NULL, NULL}
 };
-const char *optstring = "o:u:d::P::H:ShV?";
+const char *optstring = "o:u:d::P::H:ShVT:?";
 
 
 class CLIOpts {
@@ -63,6 +68,7 @@ public:
 	bool stdin_header;
 	bool daemonize;
 	int debug;
+	int connection_timeout;
 	QHash<QString,QString>* headers;
 
 	/*helper methods*/
@@ -158,6 +164,13 @@ public:
 					break;
 				} /*fall through otherwise*/
 			}
+			case 'T':
+				connection_timeout = atoi(optarg);
+				if(!connection_timeout) {
+					twlog_crit("Bad timeout value!");
+					return 0;
+				}
+				break;
 			case 'V':
 				std::cerr << VERSION_STRING << "\n";
 				exit(1);
@@ -196,6 +209,7 @@ static WebkitRenderer *gen_renderer() {
 	/*generates a WebkitRenderer object based on the command line options..*/
 	QNetworkRequest req;
 	CustomNAM *qnam = new CustomNAM();
+	qnam->connTimeout = cliopts.connection_timeout;
 	if(!cliopts.url.isNull())
 		req.setUrl(QUrl(cliopts.url));
 	if(!cliopts.proxy_host.isNull()) {

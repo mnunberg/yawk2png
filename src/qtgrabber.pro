@@ -9,10 +9,12 @@ SOURCES += main.cpp \
     webkitrenderer.cpp \
     configurablepage.cpp \
     twutil.cpp \
-    customnam.cpp
+    customnam.cpp \
+    qnrwrapper.cpp
 HEADERS += webkitrenderer.h \
     configurablepage.h \
     twutil.h \
-    customnam.h
+    customnam.h \
+    qnrwrapper.h
 QMAKE_CXXFLAGS += -g \
     -D_GNU_SOURCE
