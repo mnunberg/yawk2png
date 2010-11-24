@@ -30,6 +30,7 @@ const char USAGE_STRING[] =
 		"arguments in the form of -Aarg or --argument=arg. Spaces will break things\n"
 			"\t-o --outfile FILE\n"
 			"\t-u --url URL\n"
+			"\t-b --baseurl URL sets the base URL (only has effect when using file:// as url\n"
 			"\t-P --proxy[=http[s]://PROXY:PORT] (note the '=')\n"
 			"\t-H --with-header HEADER_FIELD:HEADER_VALUE\n"
 			"\t-S --stdin-header indicate header is being piped to stdin\n"
@@ -42,6 +43,7 @@ const char USAGE_STRING[] =
 const struct option _longopts[] = {
 	{"outfile",			required_argument,	NULL, 'o'},
 	{"url",				required_argument,	NULL, 'u'},
+	{"baseurl",			required_argument,	NULL, 'b'},
 	{"debug",			optional_argument,	NULL, 'd'},
 	{"proxy",			optional_argument,	NULL, 'P'},
 	{"with-header",		required_argument,	NULL, 'H'},
@@ -51,7 +53,7 @@ const struct option _longopts[] = {
 	{"help",			no_argument,		NULL, 'h'},
 	{NULL, 0, NULL, NULL}
 };
-const char *optstring = "o:u:d::P::H:ShVT:?";
+const char *optstring = "o:u:b:d::P::H:ShVT:?";
 
 
 class CLIOpts {
@@ -62,6 +64,7 @@ public:
 	/*value fields*/
 	char * outfile;
 	QString url;
+	QString baseurl;
 	bool use_proxy;
 	QString proxy_host;
 	quint16 proxy_port;
@@ -106,6 +109,7 @@ public:
 			switch (opt) {
 			case 'o': outfile = optarg; break;
 			case 'u': url = optarg; break;
+			case 'b': baseurl = optarg; break;
 			/*Debug.. not implemented yet*/
 			case 'd': debug = (optarg) ? atoi(optarg) : 1; break;
 			case 'H':
@@ -222,6 +226,7 @@ static WebkitRenderer *gen_renderer() {
 		qnam->setProxy(proxy);
 	}
 	WebkitRenderer *r = new WebkitRenderer(req, qnam);
+	r->baseUrl = QUrl(cliopts.baseurl);
 	return r;
 }
 
@@ -302,7 +307,10 @@ int main(int argc, char **argv)
 
 	WebkitRenderer *r = gen_renderer();
 
-	r->load();
+	if(!r->load()) {
+		twlog_crit("Problem loading %s", qPrintable(cliopts.url));
+		exit(1);
+	}
 	_SaveImage _si;
 
 	QObject::connect(r, SIGNAL(done()), &_si, SLOT(save_image()));

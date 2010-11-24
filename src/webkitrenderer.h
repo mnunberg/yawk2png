@@ -18,11 +18,12 @@ class WebkitRenderer : public QObject
 public:
 	WebkitRenderer(QNetworkRequest, QNetworkAccessManager*);
 	QUrl currentUrl; /*URL that we may have been redirected to*/
+	QUrl baseUrl; /*base url, used to resolve relative paths*/
 	QImage image;
 	ConfigurablePage page; /*Needed to subclass QWebPage to getcustomizable user agent*/
 	QNetworkRequest req;
 	QNetworkAccessManager *qnam;
-	void load();
+	bool load();
 	void render();
 	enum fetchResult {
 		OK,
