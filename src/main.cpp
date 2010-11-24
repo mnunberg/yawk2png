@@ -15,7 +15,7 @@
 #include <stdlib.h>
 #include <iostream>
 
-#define VERSION_STRING "11-23-2010.2-CURRENT"
+#define VERSION_STRING "11-24-2010.1-CURRENT"
 
 const char USAGE_STRING[] =
 		"qtgrabber v" VERSION_STRING "\n"
