@@ -31,10 +31,35 @@ WebkitRenderer::WebkitRenderer(QNetworkRequest req, QNetworkAccessManager *qnam)
 	page.setViewportSize(QSize(1024, 768));
 }
 
-void WebkitRenderer::load()
+bool WebkitRenderer::load()
 {
 	/*maybe we can put more here?*/
-	page.mainFrame()->load(req);
+	if (req.url().toString().startsWith("file://")) {
+		twlog_warn("Using baseurl %s", qPrintable(baseUrl.toString()));
+		QFile file(req.url().toLocalFile());
+		if(!file.open(QIODevice::ReadOnly)) {
+			twlog_crit("Error opening file %s: %s",
+					   qPrintable(file.fileName()),
+					   qPrintable(file.errorString()));
+			return false;
+		}
+		QByteArray fdata = file.readAll();
+
+		file.close();
+		if(fdata.isNull()) {
+			twlog_crit("data from %s is empty", qPrintable(file.fileName()));
+			file.close();
+			return false;
+		}
+		file.close();
+		page.mainFrame()->setContent(fdata, "text/html", baseUrl);
+		twlog_debug("frame is currently displaying %d bytes", page.mainFrame()->toHtml().length());
+
+		return true;
+	} else {
+		page.mainFrame()->load(req);
+		return true;
+	}
 	/*Load the request, and connect the handler...*/
 }
 
