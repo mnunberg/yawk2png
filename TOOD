@@ -1,0 +1,8 @@
+*Allow for daemon mode
+*Add watermark option
+*Add global timeout option
+*Add option for extra parameter passing such as cookies, hostname, etc. - 
+all which compose the 'state' variables of an http 'session'
+*Allow option for more complex data structures to be used as input and
+output, possibly providing more details on error status and desired behavior
+e.g. a certain resource which must be rendered etc.
