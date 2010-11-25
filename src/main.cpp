@@ -10,51 +10,43 @@
 #include "customnam.h"
 #include "twutil.h"
 
-#include <getopt.h>
+#include <argp.h>
+
 #include <string.h>
 #include <stdlib.h>
 #include <iostream>
 
-#define VERSION_STRING "11-24-2010.2-CURRENT"
+#define BAD_ARGUMENT 4
+#define MISSING_REQUIRED_ARGUMENTS 5
+#define OPTION_OK 0
 
-const char USAGE_STRING[] =
+#define VERSION_STRING "11-24-2010.3-CURRENT"
+
+static const char ABOUT[] =
 		"qtgrabber v" VERSION_STRING "\n"
-		"SYNOPSIS:\n"
-			"\tqtgrabber is a webpage capturing utility that is somewhat tolerant\n"
-			"\tof errors and is able to provide notification about them. It supports \n"
-			"\tpiping a complete HTTP header on stdin, or specifying individual \n"
-			"\theader values using the -H option\n"
-		"\n"
-		"USAGE:\n"
-		"NOTE: because getopt(3) sucks balls, you will need to put optional\n"
-		"arguments in the form of -Aarg or --argument=arg. Spaces will break things\n"
-			"\t-o --outfile FILE\n"
-			"\t-u --url URL\n"
-			"\t-b --baseurl URL sets the base URL (only has effect when using file:// as url\n"
-			"\t-P --proxy[=http[s]://PROXY:PORT] (note the '=')\n"
-			"\t-H --with-header HEADER_FIELD:HEADER_VALUE\n"
-			"\t-S --stdin-header indicate header is being piped to stdin\n"
-			"\t-T --per-connection-timeout=MSECS how much time to give each \n"
-				"\t\trequest (in msecs) before it is aborted. note, this is\n"
-				"\t\tnot the amount of time to get the page, this is just a \n"
-				"\t\ttolerance level for each asset\n"
-			"\t-V --version print version string\n";
+		"qtgrabber is a webpage capturing utility that is somewhat tolerant "
+		"of errors and is able to provide notification about them. It supports "
+		"piping a complete HTTP header on stdin, or specifying individual "
+		"header values using the -H option";
 
-const struct option _longopts[] = {
-	{"outfile",			required_argument,	NULL, 'o'},
-	{"url",				required_argument,	NULL, 'u'},
-	{"baseurl",			required_argument,	NULL, 'b'},
-	{"debug",			optional_argument,	NULL, 'd'},
-	{"proxy",			optional_argument,	NULL, 'P'},
-	{"with-header",		required_argument,	NULL, 'H'},
-	{"stdin-header",	no_argument,		NULL, 'S'},
-	{"per-connection-timeout", required_argument, NULL, 'T'},
-	{"version",			no_argument,		NULL, 'V'},
-	{"help",			no_argument,		NULL, 'h'},
-	{NULL, 0, NULL, NULL}
+
+struct argp_option opt_table[] = {
+/* basic options*/
+{"outfile",		'o',	"FILE",		0,  "output file, or - for standard output", 0},
+{"url",			'u',	"URL",		0,  "url to fetch, use file:///abspath for local files", 0},
+{"baseurl",		'b',	"URL",		0,  "base url to use for relative references in local files", 0},
+/*connection/request options*/
+{"proxy",		'P',	"http[s]://PROXY:PORT", OPTION_ARG_OPTIONAL, "Use a proxy. If a"
+	 "proxy is not provided on the command line, it will use an http*_proxy "
+	 "environment variable", 1},
+{"with-header", 'H',	"HEADER:VALUE", 0, "add a header field to the request", 1},
+{"stdin-header", 'S',	NULL,		0,	"indicate that a header is being piped on stdin", 1},
+{"per-connection-timeout", 'T', "msecs", 0, "timeout for *each entity request*", 1},
+/*miscelanny*/
+{"debug",		'd',	"LEVEL", OPTION_ARG_OPTIONAL, "debug level", 2},
+{"version",		'V',	NULL,	0,	"print version and exit", 2},
+{NULL,NULL,NULL,NULL,NULL,NULL}
 };
-const char *optstring = "o:u:b:d::P::H:ShVT:?";
-
 
 class CLIOpts {
 	/*Class to control, parse, and apply user specified options*/
@@ -69,7 +61,6 @@ public:
 	QString proxy_host;
 	quint16 proxy_port;
 	bool stdin_header;
-	bool daemonize;
 	int debug;
 	int connection_timeout;
 	QHash<QString,QString>* headers;
@@ -86,14 +77,13 @@ public:
 						regex.capturedTexts()[2].trimmed());
 		return 1;
 	}
-
 	int set_proxy(QString text) {
 		QRegExp regex("^https?://([^:]+):(\\d+)$");
 		if((regex.indexIn(text) == -1) ||
 		   /*not needed, because the first will always fail*/
 		   (regex.captureCount() != 2)) {
 			twlog_warn("Problem parsing proxy!");
-			return 0;
+			return BAD_ARGUMENT;
 			}
 		/*Capture objects generally have the entire match as their first element*/
 		proxy_host = regex.capturedTexts()[1];
@@ -101,94 +91,95 @@ public:
 		twlog_warn("%s:%d", qPrintable(proxy_host), proxy_port);
 		/*finally, succeed*/
 		return 1;
-	}
-	int parse_options(int argc, char**argv) {
-		int _optindex;
-		char opt = getopt_long(argc, argv, optstring, _longopts, &_optindex);
-		while(opt != -1) {
-			switch (opt) {
-			case 'o': outfile = optarg; break;
-			case 'u': url = optarg; break;
-			case 'b': baseurl = optarg; break;
-			/*Debug.. not implemented yet*/
-			case 'd': debug = (optarg) ? atoi(optarg) : 1; break;
-			case 'H':
-				if(header_append(QString(optarg)))
-					break;
-				else {
-					twlog_crit("Couldn't parse header '%s'", optarg);
-					return 0;
-				}
-			case 'S': {
-				QTextStream stream(stdin);
-				QString line;
-				bool success = true;
-				line = stream.readLine();
-				if(line.isNull() || (!header_append(line)))
-					success = false;
-				else {
-					line = stream.readLine();
-					while(!line.isNull()) {
-						if(!header_append(line)) {
-							break;
-							success = false;
-						}
-						line = stream.readLine();
-					}
-				}
-				if(success)
-					break;
-				else {
-					twlog_crit("Bad header on input!");
-						return 0;
-				}
-			}
-			case 'P': {
-				/*Proxy*/
-				use_proxy = true;
-				bool success = false;
-				do {
-					/*funky control structure so we can break without breaking, yo dawg*/
-					QString s;
-					if(optarg) {
-						s = QString(optarg);
-					} else if (getenv("http_proxy")) {
-						s = QString(getenv("http_proxy"));
-					} else if (getenv("https_proxy")) {
-						s = QString(getenv("https_proxy"));
-					} else {
-						twlog_crit("No proxy specified and nothing found in environment");
-						break;
-					}
-					if (set_proxy(s)) {
-						success = true;
-					}
-				} while (false);
-				if(success) {
-					break;
-				} /*fall through otherwise*/
-			}
-			case 'T':
-				twlog_crit("hi");
-				connection_timeout = atoi(optarg);
-				if(!connection_timeout) {
-					twlog_crit("Bad timeout value!");
-					return 0;
-				}
+	}	
+	error_t parse_opt(int key, char *arg, struct argp_state *state) {
+		switch (key) {
+		case 'o': outfile = arg; break;
+		case 'u': url = arg; break;
+		case 'b': baseurl = arg; break;
+		/*Debug.. not implemented yet*/
+		case 'd': debug = (arg) ? atoi(arg) : 1; break;
+		case 'H':
+			if(header_append(QString(arg)))
 				break;
-			case 'V':
-				std::cerr << VERSION_STRING << "\n";
-				exit(1);
-			case 'h':
-			case '?':
-			default:
-				return 0;
+			else {
+				twlog_crit("Couldn't parse header '%s'", arg);
+				return BAD_ARGUMENT;
 			}
-			opt = getopt_long(argc, argv, optstring, _longopts, &_optindex);
+		case 'S': {
+			QTextStream stream(stdin);
+			QString line;
+			bool success = true;
+			line = stream.readLine();
+			if(line.isNull() || (!header_append(line)))
+				success = false;
+			else {
+				line = stream.readLine();
+				while(!line.isNull()) {
+					if(!header_append(line)) {
+						break;
+						success = false;
+					}
+					line = stream.readLine();
+				}
+			}
+			if(success)
+				break;
+			else {
+				twlog_crit("Bad header on input!");
+					return BAD_ARGUMENT;
+			}
 		}
-		return postprocess();
+		case 'P': {
+			/*Proxy*/
+			use_proxy = true;
+			bool success = false;
+			do {
+				/*funky control structure so we can break without breaking, yo dawg*/
+				QString s;
+				if(arg) {
+					s = QString(arg);
+				} else if (getenv("http_proxy")) {
+					s = QString(getenv("http_proxy"));
+				} else if (getenv("https_proxy")) {
+					s = QString(getenv("https_proxy"));
+				} else {
+					twlog_crit("No proxy specified and nothing found in environment");
+					break;
+				}
+				if (set_proxy(s)) {
+					success = true;
+				}
+			} while (false);
+			if(success) {
+				break;
+			} /*fall through otherwise*/
+			return BAD_ARGUMENT;
+		}
+		case 'T':
+			connection_timeout = atoi(arg);
+			if(!connection_timeout) {
+				twlog_crit("Bad timeout value!");
+				return BAD_ARGUMENT;
+			}
+			break;
+		case 'V': std::cerr << VERSION_STRING << "\n"; exit(1);
+
+		case ARGP_KEY_END:
+			/*make sure required arguments are present*/
+			if(!(url.size() && outfile)) {
+				std::cerr << "Need URL and outfile\n";
+				argp_state_help(state, stderr, ARGP_HELP_LONG);
+				return MISSING_REQUIRED_ARGUMENTS;
+			}
+			break;
+		case ARGP_KEY_ARG:
+		default:
+			return ARGP_ERR_UNKNOWN;
+		}
+
+		return OPTION_OK;
 	}
-private:
 	int postprocess()
 	{
 		int success = 1;
@@ -209,6 +200,18 @@ private:
 static QFile outfile;
 static CLIOpts cliopts;
 
+static error_t _parseopts_wrapper(int key, char *arg, struct argp_state *state)
+{
+	return cliopts.parse_opt(key, arg, state);
+}
+
+static int parse_options(int argc, char **argv) {
+	struct argp argp = {opt_table, _parseopts_wrapper, NULL, ABOUT, NULL, NULL, NULL};
+	if(argp_parse(&argp, argc, argv, 0, 0, NULL) != 0) {
+		return 0;
+	}
+	return cliopts.postprocess();
+}
 
 static WebkitRenderer *gen_renderer() {
 	/*generates a WebkitRenderer object based on the command line options..*/
@@ -269,27 +272,25 @@ public slots:
 
 static void debuglogger(QtMsgType type, const char *msg)
 {
-#define pretty_prefix(mtype) \
+#define pretty_prefix(mtype, prefix) \
 	if(type == mtype) { \
-	std::cerr << #mtype << ": " << msg << "\n"; \
+	std::cerr << prefix << ": " << msg << "\n"; \
 			return; \
 	}
 	if(cliopts.debug)
-		pretty_prefix(QtDebugMsg);
-	pretty_prefix(QtWarningMsg);
-	pretty_prefix(QtCriticalMsg);
-	pretty_prefix(QtFatalMsg);
+		pretty_prefix(QtDebugMsg, "DEBUG");
+	pretty_prefix(QtWarningMsg, "WARNING");
+	pretty_prefix(QtCriticalMsg, "CRITICAL");
+	pretty_prefix(QtFatalMsg, "FATAL");
 #undef pretty_prefix
 }
 
 int main(int argc, char **argv)
 {
 	qInstallMsgHandler(debuglogger);
-	if((!cliopts.parse_options(argc, argv)) ||
-	   !(cliopts.url.size() && cliopts.outfile)) {
-		std::cerr << USAGE_STRING;
+	if(!parse_options(argc, argv))
 		exit(1);
-	}
+
 	QApplication a(argc, argv);
 
 	if (strcmp(cliopts.outfile, "-") == 0) {
