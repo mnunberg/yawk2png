@@ -42,6 +42,7 @@ struct argp_option opt_table[] = {
 {"with-header", 'H',	"HEADER:VALUE", 0, "add a header field to the request", 1},
 {"stdin-header", 'S',	NULL,		0,	"indicate that a header is being piped on stdin", 1},
 {"per-connection-timeout", 'T', "msecs", 0, "timeout for *each entity request*", 1},
+{"insecure",	'k',	NULL,		0, "Ignore SSL errors", 1},
 /*miscelanny*/
 {"debug",		'd',	"LEVEL", OPTION_ARG_OPTIONAL, "debug level", 2},
 {"version",		'V',	NULL,	0,	"print version and exit", 2},
@@ -51,7 +52,10 @@ struct argp_option opt_table[] = {
 class CLIOpts {
 	/*Class to control, parse, and apply user specified options*/
 public:
-	CLIOpts() { headers = new QHash<QString,QString>; };
+	CLIOpts() {
+		headers = new QHash<QString,QString>;
+		ignoreSSLErrors = false;
+	};
 	~CLIOpts() { delete headers; };
 	/*value fields*/
 	char * outfile;
@@ -64,6 +68,7 @@ public:
 	int debug;
 	int connection_timeout;
 	QHash<QString,QString>* headers;
+	bool ignoreSSLErrors;
 
 	/*helper methods*/
 	int header_append(QString text) {
@@ -163,6 +168,10 @@ public:
 				return BAD_ARGUMENT;
 			}
 			break;
+		case 'k':
+			ignoreSSLErrors = true;
+			break;
+
 		case 'V': std::cerr << VERSION_STRING << "\n"; exit(1);
 
 		case ARGP_KEY_END:
@@ -218,6 +227,7 @@ static WebkitRenderer *gen_renderer() {
 	QNetworkRequest req;
 	CustomNAM *qnam = new CustomNAM();
 	qnam->connTimeout = cliopts.connection_timeout;
+	qnam->ignoreSSLErrors = cliopts.ignoreSSLErrors;
 
 	/*make each request have these headers*/
 	qnam->headers = cliopts.headers;
