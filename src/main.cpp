@@ -20,7 +20,7 @@
 #define MISSING_REQUIRED_ARGUMENTS 5
 #define OPTION_OK 0
 
-#define VERSION_STRING "11-24-2010.3-CURRENT"
+#define VERSION_STRING "12-05-2010.0-CURRENT"
 
 static const char ABOUT[] =
 		"qtgrabber v" VERSION_STRING "\n"
