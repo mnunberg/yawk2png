@@ -10,11 +10,13 @@ SOURCES += main.cpp \
     configurablepage.cpp \
     twutil.cpp \
     customnam.cpp \
-    qnrwrapper.cpp
+    qnrwrapper.cpp \
+    customproxyfactory.cpp
 HEADERS += webkitrenderer.h \
     configurablepage.h \
     twutil.h \
     customnam.h \
-    qnrwrapper.h
+    qnrwrapper.h \
+    customproxyfactory.h
 QMAKE_CXXFLAGS += -g \
     -D_GNU_SOURCE

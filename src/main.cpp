@@ -8,6 +8,7 @@
 
 #include "webkitrenderer.h"
 #include "customnam.h"
+#include "customproxyfactory.h"
 #include "twutil.h"
 
 #include <argp.h>
@@ -25,14 +26,23 @@
 #define MISSING_REQUIRED_ARGUMENTS 5
 #define OPTION_OK 0
 
-#define VERSION_STRING "12-05-2010.1-CURRENT"
+#define VERSION_STRING "12-06-2010.1-CURRENT"
 
 static const char ABOUT[] =
 		"qtgrabber v" VERSION_STRING "\n"
 		"qtgrabber is a webpage capturing utility that is somewhat tolerant "
 		"of errors and is able to provide notification about them. It supports "
 		"piping a complete HTTP header on stdin, or specifying individual "
-		"header values using the -H option";
+		"header values using the -H option\n"
+		"PROXY BEHAVIOR:\n"
+		"You can specify an explicity http/https proxy with --proxy-TYPE where "
+		"type is http or https. You can also use the -P option (optionally with "
+		"an argument) to use the environment http_* variables as an *override* "
+		"to proxies specified on the command line. In all three of these cases "
+		"the --proxy-policy parameter to tell us whether you would like any "
+		"proxy specified to be used as a fallback for the others.. e.g. if an "
+		"http proxy should be used for https connections and vice versa, despite "
+		"only having mentioned http_proxy or --proxy-http";
 
 
 struct argp_option opt_table[] = {
@@ -40,20 +50,40 @@ struct argp_option opt_table[] = {
 {"outfile",		'o',	"FILE",		0,  "output file, or - for standard output", 0},
 {"url",			'u',	"URL",		0,  "url to fetch, use file:///abspath for local files", 0},
 {"baseurl",		'b',	"URL",		0,  "base url to use for relative references in local files", 0},
-/*connection/request options*/
+
+/*Options for extended proxy behavior*/
 {"proxy",		'P',	"http[s]://PROXY:PORT", OPTION_ARG_OPTIONAL, "Use a proxy. If a"
 	 "proxy is not provided on the command line, it will use an http*_proxy "
 	 "environment variable", 1},
+#define OPTKEY_PROXY_HTTPS 256
+{"proxy-https", OPTKEY_PROXY_HTTPS, "https://PROXY:PORT", 0,
+		"use PROXY for SSL connections", 1},
+#define OPTKEY_PROXY_HTTP 257
+{"proxy-http", OPTKEY_PROXY_HTTP, "http://PROXY:PORT", 0,
+		"use PROXY for HTTP (non-SSL) connections", 1},
+#define OPTKEY_PROXY_POLICY 258
+{"proxy-policy", OPTKEY_PROXY_POLICY, "<strict|liberal>", 0,
+		"What to do if there is only one proxy specified. `liberal' will use "
+		"the given proxy for all kinds of connections, while `strict' will "
+		"confine the use of this proxy for that type of connection specified. "
+		"Default is 'liberal'", 1},
+
+/*connection/request options*/
 {"with-header", 'H',	"HEADER:VALUE", 0, "add a header field to the request", 1},
 {"stdin-header",'S',	NULL,		0,	"indicate that a header is being piped on stdin", 1},
 {"per-connection-timeout", 'T', "msecs", 0, "timeout for *each entity request*", 1},
+{"global-timeout", 't',	"msecs",	0, "timeout for the entire fetch", 1},
 {"insecure",	'k',	NULL,		0, "Ignore SSL errors", 1},
 {"user",		'U',	"USER",		0, "Drop to USER when fetching page", 1},
+
 /*miscelanny*/
 {"debug",		'd',	"LEVEL", OPTION_ARG_OPTIONAL, "debug level", 2},
 {"version",		'V',	NULL,	0,	"print version and exit", 2},
 {NULL,NULL,NULL,NULL,NULL,NULL}
 };
+
+#define _is_default_proxy(qp) \
+	qp.type() == QNetworkProxy::DefaultProxy
 
 class CLIOpts {
 	/*Class to control, parse, and apply user specified options*/
@@ -62,20 +92,23 @@ public:
 		headers = new QHash<QString,QString>;
 		ignoreSSLErrors = false;
 		userid = -1;
+		proxyPolicy = CustomProxyFactory::Liberal;
+		global_timeout = 0;
 	};
 	~CLIOpts() { delete headers; };
 	/*value fields*/
 	char * outfile;
 	QString url;
 	QString baseurl;
-	bool use_proxy;
-	QString proxy_host;
 	uid_t userid;
-	quint16 proxy_port;
 	bool stdin_header;
 	int debug;
 	int connection_timeout;
+	int global_timeout;
 	QHash<QString,QString>* headers;
+	QNetworkProxy sslProxy;
+	QNetworkProxy httpProxy;
+	CustomProxyFactory::ProxyPolicy proxyPolicy;
 	bool ignoreSSLErrors;
 
 	/*helper methods*/
@@ -90,20 +123,22 @@ public:
 						regex.capturedTexts()[2].trimmed());
 		return 1;
 	}
-	int set_proxy(QString text) {
+	bool set_proxy(QString text, QNetworkProxy *proxy) {
 		QRegExp regex("^https?://([^:]+):(\\d+)$");
 		if((regex.indexIn(text) == -1) ||
 		   /*not needed, because the first will always fail*/
 		   (regex.captureCount() != 2)) {
 			twlog_warn("Problem parsing proxy!");
-			return BAD_ARGUMENT;
+			return false;
 			}
 		/*Capture objects generally have the entire match as their first element*/
-		proxy_host = regex.capturedTexts()[1];
-		proxy_port = regex.capturedTexts()[2].toInt();
-		twlog_warn("%s:%d", qPrintable(proxy_host), proxy_port);
+
+		proxy->setHostName((regex.capturedTexts()[1]));
+		proxy->setPort(regex.capturedTexts()[2].toInt());
+		proxy->setType(QNetworkProxy::HttpProxy);
+		twlog_warn("Setting proxy: %s:%d", qPrintable(proxy->hostName()),proxy->port());
 		/*finally, succeed*/
-		return 1;
+		return true;
 	}	
 	error_t parse_opt(int key, char *arg, struct argp_state *state) {
 		switch (key) {
@@ -145,37 +180,46 @@ public:
 		}
 		case 'P': {
 			/*Proxy*/
-			use_proxy = true;
 			bool success = false;
 			do {
-				/*funky control structure so we can break without breaking, yo dawg*/
-				QString s;
-				if(arg) {
-					s = QString(arg);
-				} else if (getenv("http_proxy")) {
-					s = QString(getenv("http_proxy"));
-				} else if (getenv("https_proxy")) {
-					s = QString(getenv("https_proxy"));
-				} else {
-					twlog_crit("No proxy specified and nothing found in environment");
-					break;
-				}
-				if (set_proxy(s)) {
-					success = true;
+#define apply_proxy_or_die(s, proxy) if(s.size() && !(success = set_proxy(s, proxy))) { break; }
+				/*Check environment first, allow argument for overrides*/
+				QString http_proxy(getenv("http_proxy"));
+				QString https_proxy(getenv("https_proxy"));
+				QString proxy_overrides(arg);
+				apply_proxy_or_die(http_proxy, &httpProxy);
+				apply_proxy_or_die(https_proxy, &sslProxy);
+				if(proxy_overrides.startsWith("https")) {
+					apply_proxy_or_die(proxy_overrides, &sslProxy);
+				} else if(proxy_overrides.size()) {
+					apply_proxy_or_die(proxy_overrides, &httpProxy);
 				}
 			} while (false);
 			if(success) {
 				break;
 			} /*fall through otherwise*/
+			twlog_crit("Proxy requested but none specified in the command line, "
+					   "and none found in the environment!");
 			return BAD_ARGUMENT;
 		}
-		case 'T':
-			connection_timeout = atoi(arg);
-			if(!connection_timeout) {
-				twlog_crit("Bad timeout value!");
-				return BAD_ARGUMENT;
-			}
+#undef apply_proxy_or_die
+#define apply_proxy_or_die(proxy) if(set_proxy(QString(arg),proxy)) \
+			{ break; } else { return BAD_ARGUMENT; }
+		case OPTKEY_PROXY_HTTP: apply_proxy_or_die(&httpProxy);
+		case OPTKEY_PROXY_HTTPS: apply_proxy_or_die(&sslProxy);
+		case OPTKEY_PROXY_POLICY: {
+			QString _policy = QString(arg).toLower();
+			if(_policy=="liberal") { proxyPolicy=CustomProxyFactory::Liberal; }
+			else if(_policy=="strict") { proxyPolicy=CustomProxyFactory::Strict; }
+			else { return BAD_ARGUMENT; }
 			break;
+		}
+#define _apply_timeout(dest) dest=atoi(arg); \
+			if(!dest) { twlog_crit("Bad timeout value!"); return BAD_ARGUMENT; } break;
+		case 'T': _apply_timeout(connection_timeout);
+		case 't': _apply_timeout(global_timeout);
+#undef _apply_timeout
+
 		case 'k':
 			ignoreSSLErrors = true;
 			break;
@@ -211,14 +255,6 @@ public:
 		int success = 1;
 		/*some postprocessing here. This configures our options a bit more,
 		  using information acquired from all arguments*/
-		if (url.size() && url.startsWith("https") && use_proxy) {
-			if(getenv("https_proxy")) {
-				QString s(getenv("https_proxy"));
-				twlog_warn(qPrintable(s));
-				if(!set_proxy(s))
-					success = 0;
-			}
-		}
 		return success;
 	}
 };
@@ -250,13 +286,15 @@ static WebkitRenderer *gen_renderer() {
 	qnam->headers = cliopts.headers;
 	if(!cliopts.url.isNull())
 		req.setUrl(QUrl(cliopts.url));
-	if(!cliopts.proxy_host.isNull()) {
-		QNetworkProxy proxy(QNetworkProxy::HttpProxy, cliopts.proxy_host, cliopts.proxy_port);
-		twlog_debug("PROXY: %s:%d", qPrintable(cliopts.proxy_host), cliopts.proxy_port);
-		qnam->setProxy(proxy);
-	}
+	twlog_debug("PROXIES: SSL: %d HTTP: %d",
+				!_is_default_proxy(cliopts.sslProxy),
+				!_is_default_proxy(cliopts.httpProxy));
+	CustomProxyFactory *factory = new CustomProxyFactory(
+			cliopts.httpProxy, cliopts.sslProxy, cliopts.proxyPolicy);
+	qnam->setProxyFactory(factory);
 	WebkitRenderer *r = new WebkitRenderer(req, qnam);
 	r->baseUrl = QUrl(cliopts.baseurl);
+	r->page.globalTimeout = cliopts.global_timeout;
 	return r;
 }
 
