@@ -14,13 +14,18 @@
 
 #include <string.h>
 #include <stdlib.h>
+
+#include <sys/types.h>
+#include <unistd.h>
+#include <pwd.h>
+
 #include <iostream>
 
 #define BAD_ARGUMENT 4
 #define MISSING_REQUIRED_ARGUMENTS 5
 #define OPTION_OK 0
 
-#define VERSION_STRING "12-05-2010.0-CURRENT"
+#define VERSION_STRING "12-05-2010.1-CURRENT"
 
 static const char ABOUT[] =
 		"qtgrabber v" VERSION_STRING "\n"
@@ -40,9 +45,10 @@ struct argp_option opt_table[] = {
 	 "proxy is not provided on the command line, it will use an http*_proxy "
 	 "environment variable", 1},
 {"with-header", 'H',	"HEADER:VALUE", 0, "add a header field to the request", 1},
-{"stdin-header", 'S',	NULL,		0,	"indicate that a header is being piped on stdin", 1},
+{"stdin-header",'S',	NULL,		0,	"indicate that a header is being piped on stdin", 1},
 {"per-connection-timeout", 'T', "msecs", 0, "timeout for *each entity request*", 1},
 {"insecure",	'k',	NULL,		0, "Ignore SSL errors", 1},
+{"user",		'U',	"USER",		0, "Drop to USER when fetching page", 1},
 /*miscelanny*/
 {"debug",		'd',	"LEVEL", OPTION_ARG_OPTIONAL, "debug level", 2},
 {"version",		'V',	NULL,	0,	"print version and exit", 2},
@@ -55,6 +61,7 @@ public:
 	CLIOpts() {
 		headers = new QHash<QString,QString>;
 		ignoreSSLErrors = false;
+		userid = -1;
 	};
 	~CLIOpts() { delete headers; };
 	/*value fields*/
@@ -63,6 +70,7 @@ public:
 	QString baseurl;
 	bool use_proxy;
 	QString proxy_host;
+	uid_t userid;
 	quint16 proxy_port;
 	bool stdin_header;
 	int debug;
@@ -171,7 +179,16 @@ public:
 		case 'k':
 			ignoreSSLErrors = true;
 			break;
-
+		case 'U': {
+			struct passwd *passwd = getpwnam(arg);
+			if(!passwd) {
+				twlog_crit("Error getting userid for %s: %s",
+						   arg, strerror(errno));
+				exit(1);
+			}
+			userid = passwd->pw_uid;
+			break;
+		}
 		case 'V': std::cerr << VERSION_STRING << "\n"; exit(1);
 
 		case ARGP_KEY_END:
@@ -301,8 +318,7 @@ int main(int argc, char **argv)
 	if(!parse_options(argc, argv))
 		exit(1);
 
-	QApplication a(argc, argv);
-
+	QApplication a(argc, argv);	
 	if (strcmp(cliopts.outfile, "-") == 0) {
 		outfile.open(1, QIODevice::WriteOnly);
 		qDebug("using stdout");
@@ -317,7 +333,14 @@ int main(int argc, char **argv)
 	}
 
 	WebkitRenderer *r = gen_renderer();
-
+	if(cliopts.userid != -1) {
+		twlog_debug("Dropping privileges to userid %d", cliopts.userid);
+		if(setuid(cliopts.userid) == -1) {
+			twlog_crit("Failed to drop privileges to userid %d: %s",
+					   cliopts.userid, strerror(errno));
+			exit(1);
+		}
+	}
 	if(!r->load()) {
 		twlog_crit("Problem loading %s", qPrintable(cliopts.url));
 		exit(1);
