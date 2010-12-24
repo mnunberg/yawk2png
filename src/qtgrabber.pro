@@ -19,8 +19,11 @@ HEADERS += webkitrenderer.h \
     qnrwrapper.h \
     customproxyfactory.h \
     grabber.h
-INCLUDEPATH += /opt/local/include
-LIBS += -L/opt/local/lib -largp
+
+macx {
+	INCLUDEPATH += /opt/local/include
+	LIBS += -L/opt/local/lib -largp
+}
 
 QMAKE_CXXFLAGS += -g \
     -D_GNU_SOURCE
