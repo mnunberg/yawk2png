@@ -1,4 +1,5 @@
 #include "qnrwrapper.h"
+#include "grabber.h"
 #include "twutil.h"
 #include <QNetworkReply>
 QNRWrapper::QNRWrapper(QNetworkReply *reply, int msecs) :
@@ -14,7 +15,9 @@ QNRWrapper::QNRWrapper(QNetworkReply *reply, int msecs) :
 
 void QNRWrapper::abortRequest()
 {
-	twlog_warn("Aborting request for URL %s", qPrintable(reply->url().toString()));
+	twlog_warn(GRABBER_STAGE_NETWORK " "
+			   GRABBER_DEBUG_TIMEOUT_ERROR " %s",
+			   qPrintable(reply->url().toString()));
 	reply->abort();
 }
 

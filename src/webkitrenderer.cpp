@@ -8,6 +8,7 @@
 #include <iostream>
 #include "configurablepage.h"
 #include "twutil.h"
+#include "grabber.h"
 WebkitRenderer::WebkitRenderer(QNetworkRequest req, QNetworkAccessManager *qnam): QObject()
 {
 	currentUrl = req.url();
@@ -23,7 +24,7 @@ WebkitRenderer::WebkitRenderer(QNetworkRequest req, QNetworkAccessManager *qnam)
 	connect((&page)->networkAccessManager(), SIGNAL(finished(QNetworkReply*)),
 			SLOT(qnamFinished(QNetworkReply*)));
 	connect(&page, SIGNAL(loadFinished(bool)), SLOT(loadFinished(bool)));
-	connect(&page, SIGNAL(loadProgress(int)), SLOT(loadProgress(int)));
+//	connect(&page, SIGNAL(loadProgress(int)), SLOT(loadProgress(int)));
 
 	/*initialize style*/
 	page.mainFrame()->setScrollBarPolicy(Qt::Horizontal, Qt::ScrollBarAlwaysOff);
@@ -81,9 +82,6 @@ void WebkitRenderer::render()
 
 void WebkitRenderer::loadFinished(bool status)
 {
-	if(!status) {
-		qCritical("Something went wrong!");
-	}
 	if (!status) {
 		resultCode = PageLoadError;
 	} else {
@@ -96,13 +94,14 @@ void WebkitRenderer::loadFinished(bool status)
 	if(resultCode != PageLoadError) {
 		render();
 	} else {
-		qCritical("PageLoadError!");
+		twlog_crit(GRABBER_STAGE_NETWORK " Error");
 	}
 	emit done();
 }
 
 void WebkitRenderer::loadProgress(int progress)
 {
+	return;
 	std::cerr << progress << "%\r";
 }
 
@@ -111,22 +110,29 @@ void WebkitRenderer::qnamFinished(QNetworkReply *reply)
 	/*This tries to detect some errors with a bit of brains. We keep track of
 	  what our 'real' URL is, by changing our currentUrl to whatever we are
 	  redirected to*/
-	if(reply->error()) {
-		twlog_crit("error for %s: %s",
-				   qPrintable(reply->url().toString()),
-				   qPrintable(reply->errorString()));
+	int statuscode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+
+#define __pretty_error \
+	(statuscode < 600 && statuscode >= 400) ? \
+			qPrintable(QString("").sprintf(GRABBER_DEBUG_HTTP_ERROR \
+										   " %d",statuscode)) : \
+			qPrintable(reply->errorString())
+
+	if(reply->error() &&
+	   reply->error() != QNetworkReply::OperationCanceledError) {
+		twlog_crit(
+				GRABBER_STAGE_NETWORK " "
+				GRABBER_DEBUG_NET_ERROR " "
+				"%s %s",
+				__pretty_error,
+				qPrintable(reply->url().toString()));
 	}
 	if(reply->url().toEncoded(QUrl::StripTrailingSlash) !=
 	   currentUrl.toEncoded(QUrl::StripTrailingSlash)) {
-//		qDebug("Not operating on URL %s (our URL is %s)",
-//			   qPrintable(reply->url().toString()),
-//			   qPrintable(currentUrl.toString()));
 		return;
 	}
-	int statuscode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
 	if(statuscode >= 400 && statuscode < 600) {
 		qDebug("%d for %s", statuscode, qPrintable(reply->url().toString()));
-		/*http error*/
 		struct http_errinfo errinfo;
 		errinfo.errcode = statuscode;
 		errinfo.url = reply->url().toString();
@@ -143,4 +149,5 @@ void WebkitRenderer::qnamFinished(QNetworkReply *reply)
 		currentUrl =
 				(location.isRelative()) ? (currentUrl.resolved(location)) : location;
 	}
+#undef __pretty_error
 }

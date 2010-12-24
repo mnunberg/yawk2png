@@ -5,12 +5,13 @@
 #include <QNetworkProxy>
 #include <QNetworkAccessManager>
 #include <QRegExp>
+#include <QWebSettings>
 
 #include "webkitrenderer.h"
 #include "customnam.h"
 #include "customproxyfactory.h"
 #include "twutil.h"
-
+#include "grabber.h"
 #include <argp.h>
 
 #include <string.h>
@@ -26,7 +27,7 @@
 #define MISSING_REQUIRED_ARGUMENTS 5
 #define OPTION_OK 0
 
-#define VERSION_STRING "12-06-2010.1-CURRENT"
+#define VERSION_STRING "12-24-2010.0-CURRENT"
 
 static const char ABOUT[] =
 		"qtgrabber v" VERSION_STRING "\n"
@@ -77,6 +78,9 @@ struct argp_option opt_table[] = {
 {"user",		'U',	"USER",		0, "Drop to USER when fetching page", 1},
 
 /*miscelanny*/
+#define OPTKEY_JAVASCRIPT_OFF 259
+{"no-javascript", OPTKEY_JAVASCRIPT_OFF, NULL, 0, "disable javascript" },
+
 {"debug",		'd',	"LEVEL", OPTION_ARG_OPTIONAL, "debug level", 2},
 {"version",		'V',	NULL,	0,	"print version and exit", 2},
 {NULL,NULL,NULL,NULL,NULL,NULL}
@@ -94,8 +98,8 @@ public:
 		userid = -1;
 		proxyPolicy = CustomProxyFactory::Liberal;
 		global_timeout = 0;
-	};
-	~CLIOpts() { delete headers; };
+	}
+	~CLIOpts() { delete headers; }
 	/*value fields*/
 	char * outfile;
 	QString url;
@@ -110,6 +114,7 @@ public:
 	QNetworkProxy httpProxy;
 	CustomProxyFactory::ProxyPolicy proxyPolicy;
 	bool ignoreSSLErrors;
+	bool javascriptDisabled;
 
 	/*helper methods*/
 	int header_append(QString text) {
@@ -223,6 +228,9 @@ public:
 		case 'k':
 			ignoreSSLErrors = true;
 			break;
+		case OPTKEY_JAVASCRIPT_OFF:
+			QWebSettings::globalSettings()->setAttribute(QWebSettings::JavascriptEnabled, false);
+			break;
 		case 'U': {
 			struct passwd *passwd = getpwnam(arg);
 			if(!passwd) {
@@ -234,7 +242,6 @@ public:
 			break;
 		}
 		case 'V': std::cerr << VERSION_STRING << "\n"; exit(1);
-
 		case ARGP_KEY_END:
 			/*make sure required arguments are present*/
 			if(!(url.size() && outfile)) {
@@ -312,20 +319,18 @@ public slots:
 			twlog_crit("Couldn't get WebkitRenderer object");
 			exit(1);
 		}
-		if(!r->image.isNull()) {
-			if(!r->image.save(&outfile, "png")) {
-				twlog_crit("Problem saving %s: %s",
-						  qPrintable(outfile.fileName()),
-						  qPrintable(outfile.errorString()));
-				exit(1);
-			}
-		} else {
-			twlog_crit("PageLoadError!");
-			QApplication::exit(1);
+		if(r->image.isNull()) {
+			twlog_crit(GRABBER_STAGE_RENDER " got null image!");
+			exit(1);
+		}
+		if(!r->image.save(&outfile, "png")) {
+			twlog_crit(GRABBER_STAGE_OUTPUT " %s: %s",
+					  qPrintable(outfile.fileName()),
+					  qPrintable(outfile.errorString()));
+			exit(1);
 		}
 		if(r->resultCode != WebkitRenderer::OK) {
-			twlog_warn("Got image, but result code was %d",
-					 r->resultCode);
+			twlog_warn("got an image, but result code was %d", r->resultCode);
 			exit(1);
 		}
 		exit(0);
@@ -355,7 +360,6 @@ int main(int argc, char **argv)
 	qInstallMsgHandler(debuglogger);
 	if(!parse_options(argc, argv))
 		exit(1);
-
 	QApplication a(argc, argv);	
 	if (strcmp(cliopts.outfile, "-") == 0) {
 		outfile.open(1, QIODevice::WriteOnly);
@@ -369,7 +373,6 @@ int main(int argc, char **argv)
 				  qPrintable(outfile.errorString()));
 		exit(1);
 	}
-
 	WebkitRenderer *r = gen_renderer();
 	if(cliopts.userid != -1) {
 		twlog_debug("Dropping privileges to userid %d", cliopts.userid);
