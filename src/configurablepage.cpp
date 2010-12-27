@@ -10,7 +10,7 @@
 ConfigurablePage::ConfigurablePage(QObject *parent) :
     QWebPage(parent)
 {
-	uaString = QString("ALL YOUR BASE ARE BELONG TO US");
+	uaString = QString("-");
 	globalTimeout = 0;
 	connect(this, SIGNAL(loadStarted()), SLOT(_configureTimeout()));
 	connect(this, SIGNAL(loadFinished(bool)), SLOT(_unsetTimeoutAction(bool)));
