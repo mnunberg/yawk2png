@@ -60,3 +60,38 @@ void ConfigurablePage::showProgress()
 					((bytesReceived() / (time(NULL) - startTime))) / 1024
 					).leftJustified(15, ' ')) << "\r";
 }
+
+void ConfigurablePage::javaScriptAlert(QWebFrame *originatingFrame, const QString &msg)
+{
+	if(jsOpts.alertDisable) {
+		twlog_debug("supressing alert with message %s", qPrintable(msg));
+	} else {
+		QWebPage::javaScriptAlert(originatingFrame, msg);
+	}
+}
+
+bool ConfigurablePage::javaScriptConfirm(QWebFrame *originatingFrame, const QString &msg)
+{
+	if(jsOpts.confirmAutoRespond) {
+		twlog_debug("auto responding with %d for %s", jsOpts.confirmResponse, qPrintable(msg));
+		return jsOpts.confirmResponse;
+	}
+	return QWebPage::javaScriptConfirm(originatingFrame, msg);
+}
+
+bool ConfigurablePage::javaScriptPrompt(QWebFrame *originatingFrame, const QString &msg, const QString &defaultValue, QString *result)
+{
+	if(jsOpts.promptAutoRespond) {
+		twlog_debug("autoresponding for input prompt '%s'", qPrintable(msg));
+		if(!jsOpts.promptResponse.isNull()) {
+			*result = jsOpts.promptResponse;
+			return true;
+		}
+		if(!defaultValue.isNull()) {
+			*result = defaultValue;
+			return true;
+		}
+		return false;
+	}
+	return QWebPage::javaScriptPrompt(originatingFrame, msg, defaultValue, result);
+}

@@ -14,6 +14,8 @@
 #include "grabber.h"
 #include <argp.h>
 
+#include "configurablepage.h"
+
 #include <string.h>
 #include <stdlib.h>
 
@@ -77,10 +79,28 @@ struct argp_option opt_table[] = {
 {"insecure",	'k',	NULL,		0, "Ignore SSL errors", 1},
 {"user",		'U',	"USER",		0, "Drop to USER when fetching page", 1},
 
-/*miscelanny*/
+/*js*/
+#define OPTGROUP_JS 3
 #define OPTKEY_JAVASCRIPT_OFF 259
-{"no-javascript", OPTKEY_JAVASCRIPT_OFF, NULL, 0, "disable javascript" },
+#define OPTKEY_JS_ALERT_DISABLE 260
+#define OPTKEY_JS_PROMPT_AUTORESPOND 261
+#define OPTKEY_JS_PROMPT_RESPONSE 262
+//#define OPTKEY_JS_CONFIRM_AUTORESPOND 263
+#define OPTKEY_JS_CONFIRM_RESPONSE 264
+{"no-javascript", OPTKEY_JAVASCRIPT_OFF, NULL, 0, "disable javascript", OPTGROUP_JS },
+{"js-alert-disable", OPTKEY_JS_ALERT_DISABLE, NULL, 0, "disable js alerts", OPTGROUP_JS},
+{"js-prompt-autorespond", OPTKEY_JS_PROMPT_AUTORESPOND, NULL, 0,
+ "autorespond to js prompts. by default this will check for a user defined "
+ "response (js-prompt-response), then for the default response, and then a "
+ "null response", OPTGROUP_JS},
+{"js-prompt-response", OPTKEY_JS_PROMPT_RESPONSE, "RESPONSE", 0,
+ "user-defined response for js input. implies js-prompt-autorespond",
+ OPTGROUP_JS},
+{"js-confirm-response", OPTKEY_JS_CONFIRM_RESPONSE, "1|0", 0,
+ "boolean integer corresponding to yes/no for confirm-style js dialogs. "
+ "the default behavior is to show a popup", OPTGROUP_JS},
 
+/*misc*/
 {"debug",		'd',	"LEVEL", OPTION_ARG_OPTIONAL, "debug level", 2},
 {"version",		'V',	NULL,	0,	"print version and exit", 2},
 {NULL,NULL,NULL,NULL,NULL,NULL}
@@ -115,6 +135,8 @@ public:
 	CustomProxyFactory::ProxyPolicy proxyPolicy;
 	bool ignoreSSLErrors;
 	bool javascriptDisabled;
+
+	struct jsopts jsOpts;
 
 	/*helper methods*/
 	int header_append(QString text) {
@@ -231,6 +253,16 @@ public:
 		case OPTKEY_JAVASCRIPT_OFF:
 			QWebSettings::globalSettings()->setAttribute(QWebSettings::JavascriptEnabled, false);
 			break;
+		case OPTKEY_JS_ALERT_DISABLE: jsOpts.alertDisable = true; break;
+		case OPTKEY_JS_CONFIRM_RESPONSE:
+			jsOpts.confirmAutoRespond = true;
+			jsOpts.confirmResponse = atoi(arg);
+			break;
+		case OPTKEY_JS_PROMPT_AUTORESPOND: jsOpts.promptAutoRespond = true; break;
+		case OPTKEY_JS_PROMPT_RESPONSE:
+			jsOpts.promptResponse = QString(arg);
+			jsOpts.promptAutoRespond = true;
+			break;
 		case 'U': {
 			struct passwd *passwd = getpwnam(arg);
 			if(!passwd) {
@@ -302,6 +334,7 @@ static WebkitRenderer *gen_renderer() {
 	WebkitRenderer *r = new WebkitRenderer(req, qnam);
 	r->baseUrl = QUrl(cliopts.baseurl);
 	r->page.globalTimeout = cliopts.global_timeout;
+	r->page.jsOpts = cliopts.jsOpts;
 	return r;
 }
 

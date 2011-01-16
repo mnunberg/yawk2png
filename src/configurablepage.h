@@ -5,6 +5,14 @@
 #include <time.h>
 #include <QTimer>
 
+struct jsopts {
+    bool alertDisable;
+    bool promptAutoRespond;
+    QString promptResponse;
+    bool confirmAutoRespond;
+    bool confirmResponse;
+};
+
 class ConfigurablePage : public QWebPage
 {
 Q_OBJECT
@@ -14,6 +22,13 @@ public:
 	virtual QString userAgentForUrl(const QUrl & url) const;
 	int globalTimeout;
 	bool isLoading;
+
+	struct jsopts jsOpts;
+
+	virtual void javaScriptAlert(QWebFrame *originatingFrame, const QString &msg);
+	virtual bool javaScriptPrompt(QWebFrame *originatingFrame, const QString &msg, const QString &defaultValue, QString *result);
+	virtual bool javaScriptConfirm(QWebFrame *originatingFrame, const QString &msg);
+
 	time_t startTime;
 private:
 	int progress;
