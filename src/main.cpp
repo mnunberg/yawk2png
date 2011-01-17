@@ -29,7 +29,7 @@
 #define MISSING_REQUIRED_ARGUMENTS 5
 #define OPTION_OK 0
 
-#define VERSION_STRING "12-24-2010.0-CURRENT"
+#define VERSION_STRING "1-17-2011.0-CURRENT"
 
 static const char ABOUT[] =
 		"qtgrabber v" VERSION_STRING "\n"
@@ -52,7 +52,8 @@ struct argp_option opt_table[] = {
 /* basic options*/
 {"outfile",		'o',	"FILE",		0,  "output file, or - for standard output", 0},
 {"url",			'u',	"URL",		0,  "url to fetch, use file:///abspath for local files", 0},
-{"baseurl",		'b',	"URL",		0,  "base url to use for relative references in local files", 0},
+{"baseurl",		'b',	"URL",		0,  "base url to use for relative references "
+ "in local files", 0},
 
 /*Options for extended proxy behavior*/
 {"proxy",		'P',	"http[s]://PROXY:PORT", OPTION_ARG_OPTIONAL, "Use a proxy. If a"
@@ -103,7 +104,7 @@ struct argp_option opt_table[] = {
 /*misc*/
 {"debug",		'd',	"LEVEL", OPTION_ARG_OPTIONAL, "debug level", 2},
 {"version",		'V',	NULL,	0,	"print version and exit", 2},
-{NULL,NULL,NULL,NULL,NULL,NULL}
+{NULL,			NULL,	NULL,	NULL,	NULL,				NULL}
 };
 
 #define _is_default_proxy(qp) \
