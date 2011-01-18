@@ -104,7 +104,7 @@ struct argp_option opt_table[] = {
 /*misc*/
 {"debug",		'd',	"LEVEL", OPTION_ARG_OPTIONAL, "debug level", 2},
 {"version",		'V',	NULL,	0,	"print version and exit", 2},
-{NULL,			NULL,	NULL,	NULL,	NULL,				NULL}
+{NULL,			0,		NULL,	0,	NULL,					0}
 };
 
 #define _is_default_proxy(qp) \
